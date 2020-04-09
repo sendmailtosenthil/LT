@@ -13,5 +13,8 @@
     "moment": "^2.24.0",
     "cookie-parser": "1.4.5",
     "mysql": "2.18.1"
+  },
+  "devDependencies": {
+    "forever": "2.0.0"
   }
 }
