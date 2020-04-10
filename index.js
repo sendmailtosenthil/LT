@@ -10,6 +10,7 @@ const endTime = 12 * 60 + 30;
 
 
 let lastServed = 0;
+let lastServedTime = time();
 let lastServedDay = '01012020';
 
 // parse application/json
@@ -72,11 +73,10 @@ app.get('/user', (req, res) => {
         error['msg'] = `Token system is not opened for new requests, available from 8:30 AM to 12:30 PM`;
         status['state'] = 'C';
     }
-    res.json({error,user,status});
+    res.json({error,user,status,last:{token:lastServed, time:lastServedTime}});
 });
 
 app.post('/user', async (req, res) => {
-    console.log(`Post Last Served ${lastServed} ${lastServedDay}`);
 
     const body = req.body;
     console.log(body);
@@ -116,11 +116,11 @@ app.post('/user', async (req, res) => {
     if(!cbre){
     	res.cookie('uinfo',newUser, { expires: new Date(Date.now() + (endTime-startTime) * 60 * 1000), httpOnly: true });
     }
-    res.json({error,user:body,lastServed: lastServed || 0});
+    res.json({error,user:body,last: {token:lastServed || 0, time:lastServedTime}});
 });
 
 app.put('/user', async (req,res) => {
-    console.log(`Put Last Served ${lastServed} ${lastServedDay}`);
+    
     const body = req.body;
     
     const today = date();
@@ -135,6 +135,7 @@ app.put('/user', async (req,res) => {
                 lastServedDay = today;
                 lastServed = 0;
             }
+            lastServedTime = time();
             return res.json({error:{state:false}, user: body});
         } catch (e){
             return res.json({error:{state:true, msg : e.message}, user:body});
@@ -152,18 +153,11 @@ app.put('/user', async (req,res) => {
 });
 
 app.put('/user/revert', async (req,res) => {
-    console.log(`Put Last Served ${lastServed} ${lastServedDay}`);
     const body = req.body;
     const today = date();
     if(body.type === 'call'){
         try{
-            const result = await db.called(0, today,body.id,body.token);
-            if(today === lastServedDay){
-                lastServed = Math.max(result, lastServed || 0);
-            } else {
-                lastServedDay = today;
-                lastServed = 0;
-            }
+            await db.called(0, today,body.id,body.token);
             return res.json({error:{state:false}, user: body});
         } catch (e){
             return res.json({error:{state:true, msg : e.message}, user:body});
@@ -239,8 +233,12 @@ var server = app.listen(7001 ,async function () {
     console.log('Running at %s', port);
     
     const today = date();
-    lastServed = await db.lastServed(today);
-
+    const ls = await db.lastServed(today);
+    lastServed = ls.token;
+    if(ls.time){
+        lastServedTime = ls.time;
+    }
+    console.log(`Loaded Last Served ${lastServed} ${lastServedTime}`);
     lastServedDay = today;
 
 });

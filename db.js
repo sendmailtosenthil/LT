@@ -108,7 +108,7 @@ async function lastServed(day){
         let connection = mysql.createConnection(dbConfig);          
         connection.connect();
         await connection.query({
-            sql : `SELECT max(token) as token FROM veggie WHERE day = ? and called = 1`,
+            sql : `SELECT token, calledtime FROM veggie where token = (SELECT max(token) as token FROM veggie WHERE day = ? and called = 1)`,
             values : [day]
         }, (error, results) => {
             if(error){
@@ -117,23 +117,23 @@ async function lastServed(day){
                 return reject(error);
             }
             if(results.length > 0){
-                resolve(results[0]['token']);
+                resolve({token: results[0]['token'], time:results[0]['calledtime']});
             } else {
-                resolve(0);
+                resolve({token:0});
             }
             connection.end();
         });
     });
 }
 
-async function called(val, day, id, token){
+async function called(val, day, id, token, calledtime){
     
     return new Promise(async (resolve, reject) => {
         let connection = mysql.createConnection(dbConfig);          
         connection.connect();
         await connection.query({
-            sql : `update veggie set called= ? where day = ? and id = ? and token = ?`,
-            values : [val,day, id, token]
+            sql : `update veggie set called= ?, calledtime = ? where day = ? and id = ? and token = ?`,
+            values : [val, calledtime, day, id, token]
         }, (error, results) => {
             if(error){
                 console.log(error);
