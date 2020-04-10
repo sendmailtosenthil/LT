@@ -50,6 +50,7 @@ app.get('/user/:status', async (req, res) => {
 });
 
 app.get('/user', (req, res) => {
+    resetLastServedInfo();
 	console.log(req.headers['x-forwarded-for'] || req.connection.remoteAddress);
     console.log(`Last Served ${lastServed} ${lastServedDay} `);
     const user = {}, error = {};
@@ -234,11 +235,21 @@ var server = app.listen(7001 ,async function () {
     
     const today = date();
     const ls = await db.lastServed(today);
-    lastServed = ls.token;
-    if(ls.time){
+    if(ls.token === 0){
+        resetLastServedInfo();
+    } else {
+        lastServed = ls.token;
         lastServedTime = ls.time;
     }
-    console.log(`Loaded Last Served ${lastServed} ${lastServedTime}`);
-    lastServedDay = today;
 
 });
+
+function resetLastServedInfo(){
+    const today = date();
+    if(lastServedDay !== today){
+        lastServed = 0;
+        lastServedTime = '01012020 08:30:00';
+        lastServedDay = today;
+        console.log(`RESET Loaded Last Served ${lastServed} ${lastServedTime}`);
+    }
+}
