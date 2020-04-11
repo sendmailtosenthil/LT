@@ -11,7 +11,8 @@ const endTime = 12 * 60 + 30;
 
 let lastServed = 0;
 let lastServedTime = time();
-let lastServedDay = '01012020';
+let lastServedDay = date();
+let suggestions = [];
 
 // parse application/json
 app.use(bodyParser.json());
@@ -40,13 +41,23 @@ function date(){
         return d;
 }
 app.get('/user/:status', async (req, res) => {
-    let status = [0,1];
+    const type = body['type'] || 'v';
+    const call = body['called'] || 1;
+    let status = type === 'v' ? [0,1] : [0,1,2];
     if(req.params.status === 'completed'){
         status = [1];
     } 
     const today = date();
-    const results = await db.get(today,status);
+    const results = await db.get(today,status,type);
     res.json({results});
+});
+
+app.get('/suggestions', async (req, res) => {
+    if(suggestions.length === 0){
+        suggestions = await db.groceryList();
+    }
+    
+    res.json(suggestions);
 });
 
 app.get('/user', (req, res) => {
@@ -79,7 +90,19 @@ app.get('/user', (req, res) => {
 
 app.post('/user', async (req, res) => {
 
+    if(req.type === 'g'){
+        const uinfo = req.cookies.uinfo;
+        if(typeof uinfo !== 'undefined'){
+            const u = uinfo.split(';');
+            if(u.length === 3){
+                body['mobile'] = u[0];
+                body['tower'] = u[1];
+                body['door'] = u[2];
+            }
+        }    
+    }
     const body = req.body;
+    const type = body['type'] || 'v';
     console.log(body);
 
     const error = {};
@@ -102,9 +125,17 @@ app.post('/user', async (req, res) => {
     const today = date();
     try {
         const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-        const results = await db.bookSlot(today, body['mobile'], body['tower'], body['door'], ip, `${cbre ? 'A' : ''} ${time()}`, cbre);
-        body['id'] = results.id;
-        body['token'] = results.token;
+        if(type === 'v'){
+            const results = await db.bookSlot(today, body['mobile'], body['tower'], body['door'], ip, `${cbre ? 'A' : ''} ${time()}`, cbre);
+            body['id'] = results.id;
+            body['token'] = `Veg-${results.token}`;
+        } else {
+            const data = {day:today, mobile : body['mobile'], tower: body['tower'], door: body['door'], details: body['details'], time:`${cbre ? 'A' : ''} ${time()}`}
+            const results = await db.bookGroceySlot(data,ip,cbre);
+            body['id'] = results.id;
+            body['token'] = `Groc-${results.token}`;
+            body['details'] = results.details;
+        }
     } catch(e) {
         console.log(e);
         error['state'] = true;
@@ -123,12 +154,13 @@ app.post('/user', async (req, res) => {
 app.put('/user', async (req,res) => {
     
     const body = req.body;
-    
+    const type = body['type'] || 'v';
+    const call = body['called'] || 1;
     const today = date();
     if(body.type === 'call'){
 	
         try{
-            const result = await db.called(1, today,body.id,body.token);
+            const result = await db.called(call, today,body.id,body.token, time(), type);
 
             if(today === lastServedDay){
                 lastServed = Math.max(result, lastServed || 0);
@@ -154,18 +186,21 @@ app.put('/user', async (req,res) => {
 });
 
 app.put('/user/revert', async (req,res) => {
+
+    const type = body['type'] || 'v';
+    const call = body['called'] || 0;
     const body = req.body;
     const today = date();
     if(body.type === 'call'){
         try{
-            await db.called(0, today,body.id,body.token);
+            await db.called(call, today,body.id,body.token, type);
             return res.json({error:{state:false}, user: body});
         } catch (e){
             return res.json({error:{state:true, msg : e.message}, user:body});
         }
     } else if(body.type === 'complete'){
         try{
-            await db.completed(0, today,body.id,body.token);
+            await db.completed(call, today,body.id,body.token,type);
             return res.json({error:false, user: body});
         } catch (e){
             return res.json({error:{state:true, msg : e.message}, user:body});
@@ -234,14 +269,15 @@ var server = app.listen(7001 ,async function () {
     console.log('Running at %s', port);
     
     const today = date();
-    const ls = await db.lastServed(today);
+    const ls = await db.lastServed(today,'v',1);
+    console.log(`${today} ${ls.token} ${ls.time}`);
     if(ls.token === 0){
         resetLastServedInfo();
     } else {
         lastServed = ls.token;
         lastServedTime = ls.time;
     }
-
+    suggestions = await db.groceryList();
 });
 
 function resetLastServedInfo(){
