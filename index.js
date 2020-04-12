@@ -49,7 +49,6 @@ app.get('/user/:status', async (req, res) => {
     } 
     const today = date();
     const results = await db.get(today,status,type);
-    res.json({results});
 });
 
 app.get('/suggestions', async (req, res) => {
@@ -155,8 +154,15 @@ app.post('/user', async (req, res) => {
             const results = await db.bookSlot(today, body['mobile'], body['tower'], body['door'], ip, `${cbre ? 'A' : ''} ${time()}`, cbre);
             body['id'] = results.id;
             body['token'] = `Veg-${results.token}`;
-        } else if(!cbre){
-            await db.restrictIP(ip, today);
+        } else {
+            const data = {day:today, mobile : body['mobile'], tower: body['tower'], door: body['door']};
+            const results = await db.restrictIP(data,ip, cbre);
+            if(results.token){
+                body['token'] = results.token;
+                body['id'] = results.id;
+                body['details'] = JSON.parse(results.details);
+                body['alternate'] = results.alternate;
+            }
         }
     } catch(e) {
         console.log(e);

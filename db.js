@@ -289,27 +289,50 @@ async function groceryList(){
     });
 }
 
-async function restrictIP(ip, day){
+async function restrictIP(i,ip, cbre){
     return new Promise(async (resolve, reject) => {
         let connection = mysql.createConnection(dbConfig);          
         connection.connect();
+        const user = {mobile:i.mobile, tower:i.tower, door:i.door};
         await connection.query({
-            sql : `SELECT * FROM daily_grocery WHERE day = ? and ip = ?`,
-            values : [day, ip]
-        }, async (error5, results5) => {
-            if(error5){
-                console.log(error5);
+            sql : `SELECT * FROM daily_grocery WHERE day = ? and tower = ? and door = ?`,
+            values : [i.day, i.tower, i.door]
+        }, async (error, results) => {
+            if(error){
+                console.log(error);
                 connection.end();
-                return reject(error5);
+                return reject(error);
             }
-            if(results5.length >= 2){
-                console.log('Reached max IP restrictions '+ip);
+
+            if(results.length !== 0){
+                user['token'] = results[0].token;
+                user['id'] = results[0].id;
+                user['details'] = results[0].data;
+                user['alternate'] = results[0].alternate;
                 connection.end();
-                return reject(new Error('IP'));
+                return resolve(user);
+            } 
+            if(!cbre){
+                await connection.query({
+                    sql : `SELECT * FROM daily_grocery WHERE day = ? and ip = ?`,
+                    values : [i.day, ip]
+                }, async (error5, results5) => {
+                    if(error5){
+                        console.log(error5);
+                        connection.end();
+                        return reject(error5);
+                    }
+                    if(results5.length >= 2){
+                        console.log('Reached max IP restrictions '+ip);
+                        connection.end();
+                        return reject(new Error('IP'));
+                    }
+                    connection.end();
+                    resolve({});
+                });
             }
-            connection.end();
-            resolve({});
         });
+        
     });
     
 }
