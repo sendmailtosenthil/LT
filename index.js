@@ -68,7 +68,7 @@ app.get('/user', (req, res) => {
     const uinfo = req.cookies.uinfo;
     if(typeof uinfo !== 'undefined'){
         const u = uinfo.split(';');
-        if(u.length === 3){
+        if(u.length >= 3){
             user['mobile'] = u[0];
             user['tower'] = u[1];
             user['door'] = u[2];
@@ -88,19 +88,45 @@ app.get('/user', (req, res) => {
     res.json({error,user,status,last:{token:lastServed, time:lastServedTime}});
 });
 
+app.post('/grocery', async (req, res) => {
+
+    const body = req.body;
+    const uinfo = req.cookies.uinfo;
+    let cbre = false;
+    if(typeof uinfo !== 'undefined'){
+        const u = uinfo.split(';');
+        if(u.length >= 3){
+            body['mobile'] = u[0];
+            body['tower'] = u[1];
+            body['door'] = u[2];
+            cbre = typeof u[3] !== undefined ? u[3] : false;
+        }
+    }    
+    console.log(body);
+
+    const error = {};
+    
+    const today = date();
+    try {
+        const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+        const data = {day:today, mobile : body['mobile'], tower: body['tower'], door: body['door'], details: JSON.stringify(body['details']), time:`${cbre ? 'A' : ''} ${time()}`, alter:body['alternate']};
+        const results = await db.bookGrocerySlot(data,ip,cbre);
+        body['id'] = results.id;
+        body['token'] = `Groc-${results.token}`;
+        body['details'] = JSON.parse(results.details);
+        
+    } catch(e) {
+        console.log(e);
+        error['state'] = true;
+        error['msg'] = `System error`;
+        return res.json({error});
+    }
+
+    res.json({error,user:body,last: {token:lastServed || 0, time:lastServedTime}});
+});
+
 app.post('/user', async (req, res) => {
 
-    if(req.type === 'g'){
-        const uinfo = req.cookies.uinfo;
-        if(typeof uinfo !== 'undefined'){
-            const u = uinfo.split(';');
-            if(u.length === 3){
-                body['mobile'] = u[0];
-                body['tower'] = u[1];
-                body['door'] = u[2];
-            }
-        }    
-    }
     const body = req.body;
     const type = body['type'] || 'v';
     console.log(body);
@@ -113,11 +139,11 @@ app.post('/user', async (req, res) => {
         return res.json({error})
     }
 
-    if(isReqNotAllowed(body['mobile'])){
+    /*if(isReqNotAllowed(body['mobile'])){
         error['state'] = true;
         error['msg'] = 'Sorry, You can book veggie booking from 8:30 AM to 12:30 PM';
         return res.json({error});
-    }
+    }*/
     const cbre = body['mobile'][0] === '#'; 
     body['door'] = body['door'].length === 3 ? `0${body['door']}` : body['door'];
     body['mobile'] = body['mobile'][0] === '#' ? body['mobile'].substring(1) : body['mobile'];
@@ -129,12 +155,8 @@ app.post('/user', async (req, res) => {
             const results = await db.bookSlot(today, body['mobile'], body['tower'], body['door'], ip, `${cbre ? 'A' : ''} ${time()}`, cbre);
             body['id'] = results.id;
             body['token'] = `Veg-${results.token}`;
-        } else {
-            const data = {day:today, mobile : body['mobile'], tower: body['tower'], door: body['door'], details: body['details'], time:`${cbre ? 'A' : ''} ${time()}`}
-            const results = await db.bookGroceySlot(data,ip,cbre);
-            body['id'] = results.id;
-            body['token'] = `Groc-${results.token}`;
-            body['details'] = results.details;
+        } else if(!cbre){
+            await db.restrictIP(ip, today);
         }
     } catch(e) {
         console.log(e);
@@ -143,11 +165,9 @@ app.post('/user', async (req, res) => {
         return res.json({error});
     }
 
-    const newUser = `${body['mobile']};${body['tower']};${body['door']}`;
+    const newUser = `${body['mobile']};${body['tower']};${body['door']};${cbre}`;
     
-    if(!cbre){
-    	res.cookie('uinfo',newUser, { expires: new Date(Date.now() + (endTime-startTime) * 60 * 1000), httpOnly: true });
-    }
+    res.cookie('uinfo',newUser, { expires: new Date(Date.now() + (endTime-startTime) * 60 * 1000), httpOnly: true });
     res.json({error,user:body,last: {token:lastServed || 0, time:lastServedTime}});
 });
 

@@ -1,11 +1,17 @@
 const mysql      = require('mysql');
-const dbConfig = {
+/*const dbConfig = {
     host     : 'SG-LT-2114-master.servers.mongodirector.com',
     user     : 'sgroot',
     password : 'u1!WkQ5n3NJPnGM7',
     database : 'lt'
   };
-
+*/
+const dbConfig = {
+    host     : 'localhost',
+    user     : 'root',
+    password : 'MyNewPass',
+    database : 'lt'
+  };
   async function bookSlot(day, mobile, tower, door, ip, time, cbre){
     
     return new Promise(async (resolve, reject) => {
@@ -30,25 +36,27 @@ const dbConfig = {
             } 
 
             if(cbre){
+              
                 await connection.query({
-                    sql : `SELECT max(token) as token FROM veggie WHERE day = ?`,
-                    values : [day]
-                }, async (error1, results1) => {
-                    if(error1){
-                        console.log(error1);
+                    sql : `insert into veggie(day,mobile,tower,door,token,ip, time) 
+                    values (?,?,?,?,(select id +1 from (SELECT max(token) as id FROM veggie WHERE day = ?) t),?,?)`,
+                    values : [day, mobile, tower, door, day, ip, time]
+                }, async (error2, results2) => {
+                    if(error2){
+                        console.log(error2);
                         connection.end();
-                        return reject(error1);
+                        return reject(error2);
                     }
-                    const token = (results1.length > 0 ? results1[0]['token'] : 0) + 1;
                     await connection.query({
-                        sql : `insert into veggie(day,mobile,tower,door,token,ip, time) values (?,?,?,?,?,?,?)`,
-                        values : [day, mobile, tower, door, token, ip, time]
-                    }, (error2, results2) => {
-                        if(error2){
-                            console.log(error2);
+                        sql : `SELECT token as token FROM veggie WHERE id = ?`,
+                        values : [results2.insertId]
+                    }, async (error1, results1) => {
+                        if(error1){
+                            console.log(error1);
                             connection.end();
-                            return reject(error2);
+                            return reject(error1);
                         }
+                        const token = (results1.length > 0 ? results1[0]['token'] : 0);
                         user['token'] = token;
                         user['id'] = results2.insertId;
                         resolve(user);
@@ -57,7 +65,7 @@ const dbConfig = {
                 });
             } else {
                 await connection.query({
-                    sql : `SELECT * FROM veggie WHERE day = ? and ip = ?`,
+                    sql : `SELECT ip FROM veggie WHERE day = ? and ip = ?`,
                     values : [day, ip]
                 }, async (error5, results5) => {
                     if(error5){
@@ -72,24 +80,25 @@ const dbConfig = {
                     }
                 
                     await connection.query({
-                        sql : `SELECT max(token) as token FROM veggie WHERE day = ?`,
-                        values : [day]
-                    }, async (error1, results1) => {
-                        if(error1){
-                            console.log(error1);
+                        sql : `insert into veggie(day,mobile,tower,door,token,ip, time) 
+                        values (?,?,?,?,(select id +1 from (SELECT max(token) as id FROM veggie WHERE day = ?) t),?,?)`,
+                        values : [day, mobile, tower, door, day, ip, time]
+                    }, async (error2, results2) => {
+                        if(error2){
+                            console.log(error2);
                             connection.end();
-                            return reject(error1);
+                            return reject(error2);
                         }
-                        const token = (results1.length > 0 ? results1[0]['token'] : 0) + 1;
                         await connection.query({
-                            sql : `insert into veggie(day,mobile,tower,door,token,ip, time) values (?,?,?,?,?,?,?)`,
-                            values : [day, mobile, tower, door, token, ip, time]
-                        }, (error2, results2) => {
-                            if(error2){
-                                console.log(error2);
+                            sql : `SELECT token as token FROM veggie WHERE id = ?`,
+                            values : [results2.insertId]
+                        }, async (error1, results1) => {
+                            if(error1){
+                                console.log(error1);
                                 connection.end();
-                                return reject(error2);
+                                return reject(error1);
                             }
+                            const token = (results1.length > 0 ? results1[0]['token'] : 0);
                             user['token'] = token;
                             user['id'] = results2.insertId;
                             resolve(user);
@@ -191,7 +200,7 @@ async function get(day, status, type){
                     mobile : e.mobile,
                     tower : e.tower,
                     door : e.door,
-                    token : e.token,
+                    token : `${type === 'v' ? 'Veg-' : 'Groc-'}${e.token}`,
                     called : e.called,
                     completed : e.complete,
                     details: e.details
@@ -203,15 +212,15 @@ async function get(day, status, type){
     });
 }
 
-async function bookGrocerySlot(allInfo, ip, cbre){
+async function bookGrocerySlot(i, ip){
     
     return new Promise(async (resolve, reject) => {
         let connection = mysql.createConnection(dbConfig);          
         connection.connect();
-        const user = {mobile:allInfo.mobile, tower:allInfo.tower, door:allInfo.door, details:allInfo.details};
+        const user = {mobile:i.mobile, tower:i.tower, door:i.door, details:i.details, alternate: i.alter};
         await connection.query({
             sql : `SELECT * FROM daily_grocery WHERE day = ? and tower = ? and door = ?`,
-            values : [allInfo.day, allInfo.tower, allInfo.door]
+            values : [i.day, i.tower, i.door]
         }, async (error, results) => {
             if(error){
                 console.log(error);
@@ -223,80 +232,38 @@ async function bookGrocerySlot(allInfo, ip, cbre){
                 user['token'] = results[0].token;
                 user['id'] = results[0].id;
                 user['details'] = results[0].data;
+                user['alternate'] = results[0].alternate;
                 connection.end();
                 return resolve(user);
             } 
-
-            if(cbre){
+            await connection.query({
+                sql : `insert into daily_grocery(day,mobile,tower,door,token,ip, time, data, alternate) 
+                    values (?,?,?,?,(select id +1 from (SELECT max(token) as id FROM veggie WHERE day = ?) t),?,?,?,?)`,
+                values : [i.day, i.mobile, i.tower, i.door, i.day, ip, i.time, i.details,i.alter]
+            }, async (error2, results2) => {
+                if(error2){
+                    console.log(error2);
+                    connection.end();
+                    return reject(error2);
+                }
                 await connection.query({
-                    sql : `SELECT max(token) as token FROM daily_grocery WHERE day = ?`,
-                    values : [allInfo.day]
+                    sql : `SELECT token as token FROM daily_grocery WHERE id = ?`,
+                    values : [results2.insertId]
                 }, async (error1, results1) => {
                     if(error1){
                         console.log(error1);
                         connection.end();
                         return reject(error1);
                     }
-                    const token = (results1.length > 0 ? results1[0]['token'] : 0) + 1;
-                    await connection.query({
-                        sql : `insert into daily_grocery(day,mobile,tower,door,token,ip, time, data) values (?,?,?,?,?,?,?,?)`,
-                        values : [allInfo.day, allInfo.mobile, allInfo.tower, allInfo.door, token, ip, allInfo.time, allInfo.details]
-                    }, (error2, results2) => {
-                        if(error2){
-                            console.log(error2);
-                            connection.end();
-                            return reject(error2);
-                        }
-                        user['token'] = token;
-                        user['id'] = results2.insertId;
-                        resolve(user);
-                        connection.end();
-                    });
+                    const token = (results1.length > 0 ? results1[0]['token'] : 0);
+                    user['token'] = token;
+                    user['id'] = results2.insertId;
+                    resolve(user);
+                    connection.end();
                 });
-            } else {
-                await connection.query({
-                    sql : `SELECT * FROM daily_grocery WHERE day = ? and ip = ?`,
-                    values : [allInfo.day, ip]
-                }, async (error5, results5) => {
-                    if(error5){
-                        console.log(error5);
-                        connection.end();
-                        return reject(error5);
-                    }
-                    if(results5.length >= 2){
-                        console.log('Reached max IP restrictions '+ip);
-                        connection.end();
-                        return reject(new Error('IP'));
-                    }
-                
-                    await connection.query({
-                        sql : `SELECT max(token) as token FROM daily_grocery WHERE day = ?`,
-                        values : [allInfo.day]
-                    }, async (error1, results1) => {
-                        if(error1){
-                            console.log(error1);
-                            connection.end();
-                            return reject(error1);
-                        }
-                        const token = (results1.length > 0 ? results1[0]['token'] : 0) + 1;
-                        await connection.query({
-                            sql : `insert into daily_grocery(day,mobile,tower,door,token,ip, time,data) values (?,?,?,?,?,?,?,?)`,
-                            values : [allInfo.day, allInfo.mobile, allInfo.tower, allInfo.door, token, ip, allInfo.time, allInfo.details]
-                        }, (error2, results2) => {
-                            if(error2){
-                                console.log(error2);
-                                connection.end();
-                                return reject(error2);
-                            }
-                            user['token'] = token;
-                            user['id'] = results2.insertId;
-                            resolve(user);
-                            connection.end();
-                        });
-                    });
-                });
-            }
-        });
+            });
+            
+        }); 
     });
 }
 
@@ -321,6 +288,32 @@ async function groceryList(){
         });
     });
 }
+
+async function restrictIP(ip, day){
+    return new Promise(async (resolve, reject) => {
+        let connection = mysql.createConnection(dbConfig);          
+        connection.connect();
+        await connection.query({
+            sql : `SELECT * FROM daily_grocery WHERE day = ? and ip = ?`,
+            values : [day, ip]
+        }, async (error5, results5) => {
+            if(error5){
+                console.log(error5);
+                connection.end();
+                return reject(error5);
+            }
+            if(results5.length >= 2){
+                console.log('Reached max IP restrictions '+ip);
+                connection.end();
+                return reject(new Error('IP'));
+            }
+            connection.end();
+            resolve({});
+        });
+    });
+    
+}
+
 module.exports.bookSlot = bookSlot;
 module.exports.lastServed = lastServed;
 module.exports.called = called;
@@ -328,3 +321,4 @@ module.exports.completed = completed;
 module.exports.get = get;
 module.exports.bookGrocerySlot = bookGrocerySlot;
 module.exports.groceryList = groceryList;
+module.exports.restrictIP = restrictIP;
