@@ -39,7 +39,7 @@ const dbConfig = {
               
                 await connection.query({
                     sql : `insert into veggie(day,mobile,tower,door,token,ip, time) 
-                    values (?,?,?,?,(select id +1 from (SELECT max(token) as id FROM veggie WHERE day = ?) t),?,?)`,
+                    values (?,?,?,?,(select id +1 from (SELECT COALESCE(max(token),0) as id FROM veggie WHERE day = ?) t),?,?)`,
                     values : [day, mobile, tower, door, day, ip, time]
                 }, async (error2, results2) => {
                     if(error2){
@@ -81,7 +81,7 @@ const dbConfig = {
                 
                     await connection.query({
                         sql : `insert into veggie(day,mobile,tower,door,token,ip, time) 
-                        values (?,?,?,?,(select id +1 from (SELECT max(token) as id FROM veggie WHERE day = ?) t),?,?)`,
+                        values (?,?,?,?,(select id +1 from (SELECT COALESCE(max(token),0) as id FROM veggie WHERE day = ?) t),?,?)`,
                         values : [day, mobile, tower, door, day, ip, time]
                     }, async (error2, results2) => {
                         if(error2){
@@ -238,7 +238,7 @@ async function bookGrocerySlot(i, ip){
             } 
             await connection.query({
                 sql : `insert into daily_grocery(day,mobile,tower,door,token,ip, time, data, alternate) 
-                    values (?,?,?,?,(select id +1 from (SELECT max(token) as id FROM veggie WHERE day = ?) t),?,?,?,?)`,
+                    values (?,?,?,?,(select id +1 from (SELECT COALESCE(max(token),0) as id FROM veggie WHERE day = ?) t),?,?,?,?)`,
                 values : [i.day, i.mobile, i.tower, i.door, i.day, ip, i.time, i.details,i.alter]
             }, async (error2, results2) => {
                 if(error2){
@@ -328,9 +328,11 @@ async function restrictIP(i,ip, cbre){
                         return reject(new Error('IP'));
                     }
                     connection.end();
-                    resolve({});
+                    return resolve({});
                 });
             }
+            connection.end();
+            return resolve({});
         });
         
     });
