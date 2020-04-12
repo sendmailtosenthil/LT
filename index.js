@@ -41,14 +41,15 @@ function date(){
         return d;
 }
 app.get('/user/:status', async (req, res) => {
-    const type = body['type'] || 'v';
-    const call = body['called'] || 1;
-    let status = type === 'v' ? [0,1] : [0,1,2];
+    //const type = body['type'] || 'v';
+    //let status = type === 'v' ? [0,1] : [0,1,2];
+    let status =[0,1];
     if(req.params.status === 'completed'){
         status = [1];
     } 
     const today = date();
-    const results = await db.get(today,status,type);
+    const results = await db.get(today,status,'v');
+    res.json({results});
 });
 
 app.get('/suggestions', async (req, res) => {
@@ -90,6 +91,12 @@ app.get('/user', (req, res) => {
 app.post('/grocery', async (req, res) => {
 
     const body = req.body;
+    const error = {};
+    if(typeof body['details'] === 'undefined' || Object.keys(body['details']) === 0){
+        error['state'] = true;
+        error['msg'] = `Please provide atleast one item to proceed`;
+        return res.json({error});
+    }
     const uinfo = req.cookies.uinfo;
     let cbre = false;
     if(typeof uinfo !== 'undefined'){
@@ -102,8 +109,6 @@ app.post('/grocery', async (req, res) => {
         }
     }    
     console.log(body);
-
-    const error = {};
     
     const today = date();
     try {
@@ -112,7 +117,9 @@ app.post('/grocery', async (req, res) => {
         const results = await db.bookGrocerySlot(data,ip,cbre);
         body['id'] = results.id;
         body['token'] = `Groc-${results.token}`;
-        body['details'] = JSON.parse(results.details);
+
+        console.log(`=========> ${results.details}`);
+        body['details'] = results.details !== null ? JSON.parse(results.details) : [];
         
     } catch(e) {
         console.log(e);
@@ -138,11 +145,11 @@ app.post('/user', async (req, res) => {
         return res.json({error})
     }
 
-    if(isReqNotAllowed(body['mobile'])){
+    /*if(isReqNotAllowed(body['mobile'])){
         error['state'] = true;
         error['msg'] = 'Sorry, You can book veggie booking from 8:30 AM to 12:30 PM';
         return res.json({error});
-    }
+    }*/
     const cbre = body['mobile'][0] === '#'; 
     body['door'] = body['door'].length === 3 ? `0${body['door']}` : body['door'];
     body['mobile'] = body['mobile'][0] === '#' ? body['mobile'].substring(1) : body['mobile'];
@@ -160,8 +167,8 @@ app.post('/user', async (req, res) => {
             if(results.token){
                 body['token'] = results.token;
                 body['id'] = results.id;
-                body['details'] = JSON.parse(results.details);
-                body['alternate'] = results.alternate;
+                body['details'] = results.details !== null ? JSON.parse(results.details) : [];
+                body['alternate'] = results.alternate !== null ? results.alternate : cbre;
             }
         }
     } catch(e) {
@@ -180,7 +187,7 @@ app.post('/user', async (req, res) => {
 app.put('/user', async (req,res) => {
     
     const body = req.body;
-    const type = body['type'] || 'v';
+    const table = body['type'] || 'v';
     const call = body['called'] || 1;
     const today = date();
     if(body.type === 'call'){

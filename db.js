@@ -330,9 +330,10 @@ async function restrictIP(i,ip, cbre){
                     connection.end();
                     return resolve({});
                 });
+            } else {
+                connection.end();
+                return resolve({});
             }
-            connection.end();
-            return resolve({});
         });
         
     });
