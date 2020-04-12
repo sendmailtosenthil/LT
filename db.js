@@ -139,6 +139,7 @@ async function lastServed(day, type, called){
 async function called(val, day, id, token, calledtime, type){
     
     const table = type === 'v' ? 'veggie' : 'daily_grocery';
+    console.log(`${table} ${val} ${calledtime} ${day} ${id} ${token}`)
     return new Promise(async (resolve, reject) => {
         let connection = mysql.createConnection(dbConfig);          
         connection.connect();
@@ -151,6 +152,7 @@ async function called(val, day, id, token, calledtime, type){
                 connection.end();
                 return reject(error);
             }
+            console.log(results);
             resolve(token);
             connection.end();
         });

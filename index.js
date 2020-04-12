@@ -40,15 +40,17 @@ function date(){
 	let d = m().add(5,'h').add(30,'m').format('DDMMYYYY');
         return d;
 }
-app.get('/user/:status', async (req, res) => {
-    //const type = body['type'] || 'v';
-    //let status = type === 'v' ? [0,1] : [0,1,2];
-    let status =[0,1];
+app.get('/user/:type/:status', async (req, res) => {
+    const type = req.params.type;
+    let status = type === 'v' ? [0,1] : [0,1,2];
+    //let status =[0,1];
     if(req.params.status === 'completed'){
         status = [1];
     } 
     const today = date();
-    const results = await db.get(today,status,'v');
+    console.log(`Type   ${type}`);
+    const results = await db.get(today,status,type);
+    console.log(results);
     res.json({results});
 });
 
@@ -185,15 +187,15 @@ app.post('/user', async (req, res) => {
 });
 
 app.put('/user', async (req,res) => {
-    
+    console.log(`In put.... ${JSON.stringify(req.body)}`);
     const body = req.body;
-    const table = body['type'] || 'v';
-    const call = body['called'] || 1;
+    const type = body['type'];
     const today = date();
-    if(body.type === 'call'){
+    const token = body.token.substring(body.token.lastIndexOf('-')+1);
+    if(body.status === 'call'){
 	
         try{
-            const result = await db.called(call, today,body.id,body.token, time(), type);
+            const result = await db.called(1, today,body.id,token, time(), type);
 
             if(today === lastServedDay){
                 lastServed = Math.max(result, lastServed || 0);
@@ -204,18 +206,19 @@ app.put('/user', async (req,res) => {
             lastServedTime = time();
             return res.json({error:{state:false}, user: body});
         } catch (e){
+            console.log(e);
             return res.json({error:{state:true, msg : e.message}, user:body});
         }
-    } else if(body.type === 'complete'){
+    } else if(body.status === 'complete'){
         try{
-            await db.completed(1, today,body.id,body.token);
+            await db.completed(1, today,body.id,token,type);
             return res.json({error:false, user: body});
         } catch (e){
             return res.json({error:{state:true, msg : e.message}, user:body});
         }
-    } else if(body.type === 'ready'){
+    } else if(body.status === 'ready'){
         try{
-            await db.completed(2, today,body.id,body.token);
+            await db.completed(2, today,body.id,token);
             return res.json({error:false, user: body});
         } catch (e){
             return res.json({error:{state:true, msg : e.message}, user:body});
@@ -227,20 +230,21 @@ app.put('/user', async (req,res) => {
 
 app.put('/user/revert', async (req,res) => {
 
-    const type = body['type'] || 'v';
-    const call = body['called'] || 0;
     const body = req.body;
+    const type = body['type'];
+    //const call = body['called'] || 0;
+    const token = body.token.substring(body.token.lastIndexOf('-')+1);
     const today = date();
-    if(body.type === 'call'){
+    if(body.status === 'call'){
         try{
-            await db.called(call, today,body.id,body.token, type);
+            await db.called(0, today,body.id,token, '',type);
             return res.json({error:{state:false}, user: body});
         } catch (e){
             return res.json({error:{state:true, msg : e.message}, user:body});
         }
-    } else if(body.type === 'complete'){
+    } else if(body.status === 'complete'){
         try{
-            await db.completed(call, today,body.id,body.token,type);
+            await db.completed(0, today,body.id,token,'',type);
             return res.json({error:false, user: body});
         } catch (e){
             return res.json({error:{state:true, msg : e.message}, user:body});
