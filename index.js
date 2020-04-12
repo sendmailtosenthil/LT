@@ -139,11 +139,11 @@ app.post('/user', async (req, res) => {
         return res.json({error})
     }
 
-    /*if(isReqNotAllowed(body['mobile'])){
+    if(isReqNotAllowed(body['mobile'])){
         error['state'] = true;
         error['msg'] = 'Sorry, You can book veggie booking from 8:30 AM to 12:30 PM';
         return res.json({error});
-    }*/
+    }
     const cbre = body['mobile'][0] === '#'; 
     body['door'] = body['door'].length === 3 ? `0${body['door']}` : body['door'];
     body['mobile'] = body['mobile'][0] === '#' ? body['mobile'].substring(1) : body['mobile'];
@@ -196,6 +196,13 @@ app.put('/user', async (req,res) => {
     } else if(body.type === 'complete'){
         try{
             await db.completed(1, today,body.id,body.token);
+            return res.json({error:false, user: body});
+        } catch (e){
+            return res.json({error:{state:true, msg : e.message}, user:body});
+        }
+    } else if(body.type === 'ready'){
+        try{
+            await db.completed(2, today,body.id,body.token);
             return res.json({error:false, user: body});
         } catch (e){
             return res.json({error:{state:true, msg : e.message}, user:body});
@@ -308,4 +315,15 @@ function resetLastServedInfo(){
         lastServedDay = today;
         console.log(`RESET Loaded Last Served ${lastServed} ${lastServedTime}`);
     }
+}
+
+function randomUniqueTokens(num=4, max=20){
+    const results = [];
+    while(results.length !== num){
+        let ran = Math.round(Math.random() * max);
+        if(results.filter(s => s === ran).length === 0){
+            results.push(ran);
+        }
+    }
+    return results;
 }
