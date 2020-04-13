@@ -240,7 +240,7 @@ async function bookGrocerySlot(i, ip){
             } 
             await connection.query({
                 sql : `insert into daily_grocery(day,mobile,tower,door,token,ip, time, data, alternate) 
-                    values (?,?,?,?,(select id +1 from (SELECT COALESCE(max(token),0) as id FROM veggie WHERE day = ?) t),?,?,?,?)`,
+                    values (?,?,?,?,(select id + 1 from (SELECT COALESCE(max(token),0) as id FROM daily_grocery WHERE day = ?) t),?,?,?,?)`,
                 values : [i.day, i.mobile, i.tower, i.door, i.day, ip, i.time, i.details,i.alter]
             }, async (error2, results2) => {
                 if(error2){
@@ -283,7 +283,7 @@ async function groceryList(){
             }
             const finalResults = [];
             results.forEach(e => {
-                finalResults.push(name);
+                finalResults.push(e.name);
             });
             resolve(finalResults);
             connection.end();
@@ -342,6 +342,33 @@ async function restrictIP(i,ip, cbre){
     
 }
 
+async function getGrocery(day, token){
+    return new Promise(async (resolve, reject) => {
+        let connection = mysql.createConnection(dbConfig);          
+        connection.connect();
+        await connection.query({
+            sql : `select * from daily_grocery where day=? and token=?`,
+            values : [day,token]
+        }, (error, results) => {
+            if(error){
+                console.log(error);
+                connection.end();
+                return reject(error);
+            }
+            const finalResults = {};
+            finalResults['id'] = results[0].id;
+            finalResults['mobile'] = results[0].mobile;
+            finalResults['tower'] = results[0].tower;
+            finalResults['door'] = results[0].door;
+            finalResults['details'] = JSON.parse(results[0].data);
+            finalResults['token'] = `Groc-${token}`;
+            finalResults['alternate'] = results[0].alternate === 1 ? 'A' : '';
+            resolve(finalResults);
+            connection.end();
+        });
+    });
+}
+
 module.exports.bookSlot = bookSlot;
 module.exports.lastServed = lastServed;
 module.exports.called = called;
@@ -350,3 +377,4 @@ module.exports.get = get;
 module.exports.bookGrocerySlot = bookGrocerySlot;
 module.exports.groceryList = groceryList;
 module.exports.restrictIP = restrictIP;
+module.exports.getGrocery = getGrocery;

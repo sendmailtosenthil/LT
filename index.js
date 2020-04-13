@@ -20,6 +20,7 @@ app.use(bodyParser.json());
 app.use(cookieParser());
 
 app.use(cors());
+//app.use(cors({credentials: true, origin: 'http://localhost:4200'}));
 
 function hr() {
 	let d = m().add(5,'h').add(30,'m').format('HH');
@@ -40,6 +41,7 @@ function date(){
 	let d = m().add(5,'h').add(30,'m').format('DDMMYYYY');
         return d;
 }
+
 app.get('/user/:type/:status', async (req, res) => {
     const type = req.params.type;
     let status = type === 'v' ? [0,1] : [0,1,2];
@@ -60,6 +62,13 @@ app.get('/suggestions', async (req, res) => {
     }
     
     res.json(suggestions);
+});
+
+app.get('/grocery/:token', async (req, res) => {
+    const tokenNum = req.params.token.substring(req.params.token.lastIndexOf('-')+1);
+    const today = date();
+    const user = await db.getGrocery(today, tokenNum);
+    res.json({user});
 });
 
 app.get('/user', (req, res) => {
@@ -113,15 +122,13 @@ app.post('/grocery', async (req, res) => {
     console.log(body);
     
     const today = date();
+    const alter = body['alternate'] === 'A' ? 1 : 0;
     try {
         const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-        const data = {day:today, mobile : body['mobile'], tower: body['tower'], door: body['door'], details: JSON.stringify(body['details']), time:`${cbre ? 'A' : ''} ${time()}`, alter:body['alternate']};
+        const data = {day:today, mobile : body['mobile'], tower: body['tower'], door: body['door'], details: JSON.stringify(body['details']), time:`${cbre ? 'A' : ''} ${time()}`, alter};
         const results = await db.bookGrocerySlot(data,ip,cbre);
         body['id'] = results.id;
         body['token'] = `Groc-${results.token}`;
-
-        console.log(`=========> ${results.details}`);
-        body['details'] = results.details !== null ? JSON.parse(results.details) : [];
         
     } catch(e) {
         console.log(e);
@@ -147,11 +154,11 @@ app.post('/user', async (req, res) => {
         return res.json({error})
     }
 
-    /*if(isReqNotAllowed(body['mobile'])){
+    if(isReqNotAllowed(body['mobile'])){
         error['state'] = true;
         error['msg'] = 'Sorry, You can book veggie booking from 8:30 AM to 12:30 PM';
         return res.json({error});
-    }*/
+    }
     const cbre = body['mobile'][0] === '#'; 
     body['door'] = body['door'].length === 3 ? `0${body['door']}` : body['door'];
     body['mobile'] = body['mobile'][0] === '#' ? body['mobile'].substring(1) : body['mobile'];
