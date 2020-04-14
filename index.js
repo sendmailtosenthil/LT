@@ -5,14 +5,16 @@ const bodyParser = require('body-parser');
 const db = require('./db');
 
 const cors = require('cors');
-const startTime = 8 * 60 + 30;
-const endTime = 12 * 60 + 30;
+const startTime = 0;//8 * 60 + 30;
+const endTime = 24*60;//12 * 60 + 30;
 
 
 let lastServed = 0;
 let lastServedTime = time();
 let lastServedDay = date();
 let suggestions = [];
+let lastGrocServed = 0;
+let lastGrocServedTime = time();
 
 // parse application/json
 app.use(bodyParser.json());
@@ -74,7 +76,7 @@ app.get('/grocery/:token', async (req, res) => {
 app.get('/user', (req, res) => {
     resetLastServedInfo();
 	console.log(req.headers['x-forwarded-for'] || req.connection.remoteAddress);
-    console.log(`Last Served ${lastServed} ${lastServedDay} `);
+    
     const user = {}, error = {};
     const uinfo = req.cookies.uinfo;
     if(typeof uinfo !== 'undefined'){
@@ -96,7 +98,7 @@ app.get('/user', (req, res) => {
         error['msg'] = `Token system is not opened for new requests, available from 8:30 AM to 12:30 PM`;
         status['state'] = 'C';
     }
-    res.json({error,user,status,last:{token:lastServed, time:lastServedTime}});
+    res.json({error,user,status,last:{token:`Veg-${lastServed}`, time:lastServedTime}});
 });
 
 app.post('/grocery', async (req, res) => {
@@ -137,7 +139,7 @@ app.post('/grocery', async (req, res) => {
         return res.json({error});
     }
 
-    res.json({error,user:body,last: {token:lastServed || 0, time:lastServedTime}});
+    res.json({error,user:body,last: {token:lastGrocServed || 0, time:lastGrocServedTime}});
 });
 
 app.post('/user', async (req, res) => {
@@ -164,20 +166,23 @@ app.post('/user', async (req, res) => {
     body['mobile'] = body['mobile'][0] === '#' ? body['mobile'].substring(1) : body['mobile'];
     
     const today = date();
+    let last = {};
     try {
         const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
         if(type === 'v'){
             const results = await db.bookSlot(today, body['mobile'], body['tower'], body['door'], ip, `${cbre ? 'A' : ''} ${time()}`, cbre);
             body['id'] = results.id;
             body['token'] = `Veg-${results.token}`;
+            last = {token:`Veg-${lastServed || 0}`, time:lastServedTime};
         } else {
             const data = {day:today, mobile : body['mobile'], tower: body['tower'], door: body['door']};
             const results = await db.restrictIP(data,ip, cbre);
             if(results.token){
-                body['token'] = results.token;
+                body['token'] = `Groc-${results.token}`;
                 body['id'] = results.id;
                 body['details'] = results.details !== null ? JSON.parse(results.details) : [];
                 body['alternate'] = results.alternate !== null ? results.alternate : cbre;
+                last = {token:`Groc-${lastGrocServed || 0}`, time:lastGrocServedTime};
             }
         }
     } catch(e) {
@@ -190,7 +195,7 @@ app.post('/user', async (req, res) => {
     const newUser = `${body['mobile']};${body['tower']};${body['door']};${cbre}`;
     
     res.cookie('uinfo',newUser, { expires: new Date(Date.now() + (endTime-startTime) * 60 * 1000), httpOnly: true });
-    res.json({error,user:body,last: {token:lastServed || 0, time:lastServedTime}});
+    res.json({error,user:body,last});
 });
 
 app.put('/user', async (req,res) => {
@@ -205,12 +210,22 @@ app.put('/user', async (req,res) => {
             const result = await db.called(1, today,body.id,token, time(), type);
 
             if(today === lastServedDay){
-                lastServed = Math.max(result, lastServed || 0);
+                if(type === 'v'){
+                    lastServed = Math.max(result, lastServed || 0);
+                }else{
+                    lastGrocServed = Math.max(result, lastGrocServed || 0);
+                }
             } else {
                 lastServedDay = today;
                 lastServed = 0;
+                lastGrocServed = 0;
             }
-            lastServedTime = time();
+            if(type === 'v'){
+                lastServedTime = time();
+            } else {
+                lastGrocServedTime = time();
+            }
+
             return res.json({error:{state:false}, user: body});
         } catch (e){
             console.log(e);
@@ -318,7 +333,8 @@ var server = app.listen(7001 ,async function () {
     var port = server.address().port;
 
     console.log('Running at %s', port);
-    
+    suggestions = await db.groceryList();
+
     const today = date();
     const ls = await db.lastServed(today,'v',1);
     console.log(`${today} ${ls.token} ${ls.time}`);
@@ -328,7 +344,14 @@ var server = app.listen(7001 ,async function () {
         lastServed = ls.token;
         lastServedTime = ls.time;
     }
-    suggestions = await db.groceryList();
+
+    const grocLast = await db.lastServed(today,'g',1);
+    if(grocLast.token === 0){
+        resetLastServedInfo();
+    } else {
+        lastGrocServed = grocLast.token;
+        lastGrocServedTime = grocLast.time;
+    }
 });
 
 function resetLastServedInfo(){
@@ -336,9 +359,12 @@ function resetLastServedInfo(){
     if(lastServedDay !== today){
         lastServed = 0;
         lastServedTime = '01012020 08:30:00';
+        lastGrocServed = 0;
+        lastGrocServedTime = '01012020 08:30:00';
         lastServedDay = today;
-        console.log(`RESET Loaded Last Served ${lastServed} ${lastServedTime}`);
+        console.log(`RESET Loaded Last Served Veg-${lastServed} ${lastServedTime} Groc-${lastGrocServed} ${lastGrocServedTime}`);
     }
+    console.log(`Last Served Veg-${lastServed} ${lastServedTime} Groc-${lastGrocServed} ${lastGrocServedTime}`);
 }
 
 function randomUniqueTokens(num=4, max=20){
